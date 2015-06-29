@@ -1,0 +1,15 @@
+# Python
+*.pyc
+
+# Eclipse
+.project
+.pydevproject
+.settings/
+
+# Misc
+*.dSYM
+*.log
+.DS_Store
+tests/integration/vuln-server
+
+
