@@ -14,18 +14,19 @@ class ProxyHooks(object):
         return data
 
     def post_downstream_send(self, socket_, data):
-        pass
+        return True
 
     def pre_upstream_send(self, socket_, data):
         return data
 
     def post_upstream_send(self, socket_, data):
-        pass
+        return True
 
 class Upstream(object):
 
     def __init__(self, socket_):
         self.socket_ = socket.socket(socket_.family, socket_.type, socket_.proto)
+        self.socket_.settimeout(socket_.gettimeout())
 
     def connect(self, connect_data):
         try:
@@ -76,13 +77,15 @@ class Downstream(object):
             if self._direction(other_socket) == StreamDirection.UPSTREAM:
                 data = self.proxy_hook.pre_upstream_send(other_socket, data)
                 other_socket.send(data)
-                self.proxy_hook.post_upstream_send(other_socket, data)
+                is_alive = self.proxy_hook.post_upstream_send(other_socket, data)
             elif self._direction(other_socket) == StreamDirection.DOWNSTREAM:
                 data = self.proxy_hook.pre_downstream_send(other_socket, data)
                 other_socket.send(data)
-                self.proxy_hook.post_downstream_send(other_socket, data)
+                is_alive = self.proxy_hook.post_downstream_send(other_socket, data)
             else:
                 raise RuntimeWarning("Unknown proxy state for current connection")
+            if not is_alive:
+                self._on_close(socket_)
         else:
             other_socket.send(data)
 
