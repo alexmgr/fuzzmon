@@ -44,9 +44,11 @@ class Downstream(object):
         self.proxy_hook = proxy_hook
         self.inputs = [self.downstream_socket]
         self.channels = []
+        self.is_running = False
 
     def serve(self, buffer_size=4096, timeout=None):
-        while True:
+        self.is_running = True
+        while self.is_running:
             if timeout is None:
                 read_ready, _, _ = select.select(self.inputs, [], [])
             else:
@@ -60,6 +62,7 @@ class Downstream(object):
                         self._on_close(socket_)
                     else:
                         self._on_read(socket_, data)
+        self.is_running = False
 
     def _on_accept(self):
         downstream_client_socket, client_addr = self.downstream_socket.accept()
