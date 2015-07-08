@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
+import binascii
+import os
+import Queue
+import time
 import thread
-import threading
-import network
+
+import fuzz_proxy.monitor as fuzzmon
+import fuzz_proxy.network as fuzznet
+
 
 class Dequeue(object):
     """ Python collections.deque only supports Hashable entries
@@ -96,21 +101,28 @@ class Dequeue(object):
     def sort(self, cmp=None, key=None, reverse=False):
         self.items.sort(cmp=None, key=None, reverse=False)
 
-class DebuggingHooks(network.ProxyHooks):
+class DebuggingHooks(fuzznet.ProxyHooks):
 
-    def __init__(self, debugger, max_streams=10, max_pkts_per_stream=10, crash_timeout=0.1):
+    def __init__(self, debugger, crash_folder="metadata", max_streams=10, max_pkts_per_stream=10, crash_timeout=0.1):
         self.debugger = debugger
-        self.crash_event = threading.Event()
+        if not os.path.isdir(crash_folder):
+            os.makedirs(os.path.join(os.path.abspath(os.path.curdir), crash_folder))
+        self.crash_folder = crash_folder
+#         self.crash_event = threading.Event()
+        self.crash_events = Queue.Queue()
         self.streams = Dequeue(maxlen=max_streams)
         self.max_pkts_per_stream = max_pkts_per_stream
         self.crash_timeout = crash_timeout
-        thread.start_new_thread(debugger.watch, (self.on_signal,))
+        thread.start_new_thread(debugger.watch, (self.on_signal, self.on_event, self.on_exit))
 
     def _get_stream(self, socket_):
         for stream in self.streams:
             if socket_ in stream.keys():
                 return stream
         return None
+
+    def _get_stream_history(self):
+        return [stream.values()[0] for stream in self.streams]
 
     def _to_tuple(self, socket_):
         server_tuple = socket_.getpeername()
@@ -129,22 +141,29 @@ class DebuggingHooks(network.ProxyHooks):
         return data
 
     def post_upstream_send(self, socket_, data):
-        self.crash_event.wait(self.crash_timeout)
-        if self.crash_event.is_set():
-            print("Dead, data: %s" % data)
-            # Restart process
-            # Reset event flag
+        try:
+            crash_report = self.crash_events.get(timeout=self.crash_timeout)
+            crash_report.stream = [binascii.hexlify(pkt) for pkt in self._get_stream(socket_).values()[0]]
+            # Populate history
+            crash_file_name = os.path.join(self.crash_folder, "%s.json" % crash_report.pid)
+            with open(crash_file_name, "w") as f:
+                crash_report.to_json(f)
             return False
-        else:
+        except Queue.Empty:
             return True
 
-    def on_signal(self, signal):
-        process = signal.process
-        signum = signal.signum
-        self.crash_event.set()
-        # log
-        signal.display(log=print)
-        process.dumpRegs(log=print)
-#         process.dumpMaps(log=print)
-#         process.dumpStack(log=print)
+    def on_signal(self, signal_):
+        process = signal_.process
+        signum = signal_.signum
+        if signum in fuzzmon.crash_signals:
+            crash_report = fuzzmon.CrashReport(process.pid, signum, time.time())
+            self.crash_events.put(crash_report)
         process.cont(signum)
+
+    def on_event(self, event):
+        pass
+
+    def on_exit(self, event):
+        process = event.process
+        print(process.pid)
+        # Restart process
