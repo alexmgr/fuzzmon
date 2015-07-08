@@ -6,10 +6,14 @@
 .pydevproject
 .settings/
 
+# PyCharm
+.idea/
+
 # Misc
 *.dSYM
 *.log
 .DS_Store
 tests/integration/vuln-server
+metadata
 
 

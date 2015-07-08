@@ -39,4 +39,4 @@ if __name__ == "__main__":
     hooks = DebuggingHooks(dbg)
 
     server = Downstream(server_socket, client_socket, server_address, hooks)
-    server.serve()
+    server.serve(timeout=2)

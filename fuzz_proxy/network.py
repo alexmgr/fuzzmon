@@ -68,7 +68,8 @@ class Downstream(object):
         downstream_client_socket, client_addr = self.downstream_socket.accept()
         upstream_client_socket = Upstream(self.upstream_socket).connect(self.upstream_address)
         if upstream_client_socket is not None:
-            self.channels.append({StreamDirection.DOWNSTREAM:downstream_client_socket, StreamDirection.UPSTREAM:upstream_client_socket})
+            self.channels.append({StreamDirection.DOWNSTREAM:downstream_client_socket,
+                                  StreamDirection.UPSTREAM:upstream_client_socket})
             self.inputs.append(downstream_client_socket)
             self.inputs.append(upstream_client_socket)
         else:

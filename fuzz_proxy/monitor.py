@@ -8,7 +8,8 @@ import ptrace.debugger as pdbg
 import ptrace.signames
 
 
-crash_signals = (signal.SIGILL, signal.SIGABRT, signal.SIGEMT, signal.SIGFPE, signal.SIGBUS, signal.SIGSEGV, signal.SIGSYS)
+crash_signals = (signal.SIGILL, signal.SIGABRT, signal.SIGEMT, signal.SIGFPE, signal.SIGBUS, signal.SIGSEGV,
+                 signal.SIGSYS)
 
 def get_pids(name):
     pgrep = ("pgrep", name)
@@ -66,14 +67,14 @@ class CrashReport(object):
         self.history = []
 
     def to_json(self, f):
-        json.dump({"pid":self.pid,
-                   "signal":self.signal,
-                   "time":self.time,
-                   "registers":self.registers,
-                   "backtrace":self.backtrace,
-                   "disassembly":self.disassembly,
-                   "maps":self.maps,
-                   "stream":self.stream,
-                   "history":self.history},
+        json.dump({"pid": self.pid,
+                   "signal": self.signal,
+                   "time": self.time,
+                   "registers": self.registers,
+                   "backtrace": self.backtrace,
+                   "disassembly": self.disassembly,
+                   "maps": self.maps,
+                   "stream": self.stream,
+                   "history": self.history},
                   f,
                   indent=4)
