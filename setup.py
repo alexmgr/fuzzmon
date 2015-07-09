@@ -14,7 +14,7 @@ setup(
     license="GPLv2",
     keywords=["proxy", "fuzzing", "debugger"],
     url="https://github.com/alexmgr/fuzz-proxy",
-    install_requires=["python-ptrace"],
+    install_requires=["python-ptrace", "distorm3"],
     test_suite="nose.collector",
     tests_require=["nose"]
 )
