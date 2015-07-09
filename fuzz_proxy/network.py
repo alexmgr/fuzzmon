@@ -57,7 +57,10 @@ class Downstream(object):
                 if socket_ == self.downstream_socket:
                     self._on_accept()
                 else:
-                    data = socket_.recv(buffer_size)
+                    try:
+                        data = socket_.recv(buffer_size)
+                    except socket.error:
+                        self._on_close(socket_)
                     if len(data) == 0:
                         self._on_close(socket_)
                     else:
@@ -77,29 +80,41 @@ class Downstream(object):
 
     def _on_read(self, socket_, data):
         other_socket = self._other(socket_)
-        if self.proxy_hook is not None:
-            if self._direction(other_socket) == StreamDirection.UPSTREAM:
-                data = self.proxy_hook.pre_upstream_send(other_socket, data)
-                other_socket.send(data)
-                is_alive = self.proxy_hook.post_upstream_send(other_socket, data)
-            elif self._direction(other_socket) == StreamDirection.DOWNSTREAM:
-                data = self.proxy_hook.pre_downstream_send(other_socket, data)
-                other_socket.send(data)
-                is_alive = self.proxy_hook.post_downstream_send(other_socket, data)
+        if other_socket is not None:
+            if self.proxy_hook is not None:
+                if self._direction(other_socket) == StreamDirection.UPSTREAM:
+                    data = self.proxy_hook.pre_upstream_send(other_socket, data)
+                    other_socket.send(data)
+                    is_alive = self.proxy_hook.post_upstream_send(other_socket, data)
+                elif self._direction(other_socket) == StreamDirection.DOWNSTREAM:
+                    data = self.proxy_hook.pre_downstream_send(other_socket, data)
+                    other_socket.send(data)
+                    is_alive = self.proxy_hook.post_downstream_send(other_socket, data)
+                else:
+                    raise RuntimeWarning("Unknown proxy state for current connection")
+                if not is_alive:
+                    self._on_close(socket_)
             else:
-                raise RuntimeWarning("Unknown proxy state for current connection")
-            if not is_alive:
-                self._on_close(socket_)
+                other_socket.send(data)
         else:
-            other_socket.send(data)
+            self._on_close(socket_)
 
     def _on_close(self, socket_):
         other_socket = self._other(socket_)
-        self.channels.remove(self._get_socket_pair(socket_))
-        self.inputs.remove(socket_)
-        self.inputs.remove(other_socket)
-        socket_.close()
-        other_socket.close()
+        if self._get_socket_pair(socket_) in self.channels:
+            self.channels.remove(self._get_socket_pair(socket_))
+        if socket_ in self.inputs:
+            self.inputs.remove(socket_)
+        if other_socket in self.inputs:
+            self.inputs.remove(other_socket)
+        try:
+            socket_.close()
+        except socket.error:
+            pass
+        try:
+            other_socket.close()
+        except (socket.error, AttributeError):
+            pass
 
     def _get_socket_pair(self, socket_):
         for channel in self.channels:
