@@ -10,6 +10,9 @@ class StreamDirection(object):
 
 class ProxyHooks(object):
 
+    def __init__(self):
+        self.is_done = False
+
     def pre_downstream_send(self, socket_, data):
         return data
 
@@ -48,7 +51,7 @@ class Downstream(object):
 
     def serve(self, buffer_size=4096, timeout=None):
         self.is_running = True
-        while self.is_running:
+        while self.is_running and not self.proxy_hook.is_done:
             if timeout is None:
                 read_ready, _, _ = select.select(self.inputs, [], [])
             else:
