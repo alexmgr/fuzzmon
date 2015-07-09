@@ -1,5 +1,7 @@
 /*
-   Taken from here: http://pastebin.com/NNH6wRmk
+   Taken and fixed from here: http://pastebin.com/NNH6wRmk
+
+   Compile: cc -z execstack -fno-stack-protector -g -o vuln-server vuln-server.c
 
    Description: Simple server program with intentional vulnerabilities for
    learning purposes.
@@ -143,10 +145,7 @@ int main(int argc, char *argv[]) {
         clientQuit = 0;
         while ( !clientQuit &&  read_line(sockfd, line, sizeof(line)) != 0)
         {
-            printf( "%s:%d %s\n",
-                    inet_ntoa(clientAddress.sin_addr),
-                    ntohs(clientAddress.sin_port),
-                    line);
+            printf( "Got client input: %s\n", line);
             if (0 == strncmp(line, "QUIT", 4))
             {
                 clientQuit = 1;
