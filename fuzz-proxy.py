@@ -65,7 +65,7 @@ if __name__ == "__main__":
         parser.exit(2, "ERROR: Both program and pid (-p) provided\n")
 
     if args.quit:
-        args.delay = -1
+        args.wait = -1
 
     to_host = lambda x: x[0] if len(x) == 1 else x
 
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     except IOError as ioe:
         parser.exit(3, "ERROR: %s" % str(ioe))
 
-    hooks = DebuggingHooks(dbg, args.session, args.output, args.delay)
+    hooks = DebuggingHooks(dbg, args.session, args.output, args.wait)
 
     server = Downstream(server_socket, client_socket, server_address, hooks)
     server.serve(timeout=3)
