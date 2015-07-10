@@ -4,7 +4,7 @@
 from setuptools import setup
 
 setup(
-    name="fuzz-proxy",
+    name="fuzzmon",
     version="0.1",
     packages=["fuzz_proxy"],
     author="Alex Moneger",
@@ -12,9 +12,10 @@ setup(
     description=(
         "A transport layer proxy which monitors the server backend"),
     license="GPLv2",
-    keywords=["proxy", "fuzzing", "debugger"],
-    url="https://github.com/alexmgr/fuzz-proxy",
+    keywords=["proxy", "fuzzing", "debugger", "ptrace", "bsd"],
+    url="https://github.com/alexmgr/fuzzmon",
     install_requires=["python-ptrace", "distorm3"],
+    scripts=["fuzzmon"],
     test_suite="nose.collector",
     tests_require=["nose"]
 )

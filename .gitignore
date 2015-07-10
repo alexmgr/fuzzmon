@@ -1,5 +1,9 @@
 # Python
+.eggs/
+*.egg-info/
 *.pyc
+build/
+dist/
 
 # Eclipse
 .project
