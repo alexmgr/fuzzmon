@@ -6,6 +6,8 @@ import Queue
 import time
 import thread
 
+import ptrace.error as perror
+
 import fuzz_proxy.monitor as fuzzmon
 import fuzz_proxy.network as fuzznet
 
@@ -82,7 +84,7 @@ class Dequeue(object):
         if len(self.items) < self.maxlen:
             self.items.insert(key, item)
         else:
-            raise ValueError("Cannot insert on full dequeue list")
+            raise ValueError("Cannot insert in full dequeue list")
 
     def pop(self):
         return self.items.pop()
@@ -96,24 +98,28 @@ class Dequeue(object):
         self.items.remove(v)
 
     def reverse(self):
-        self.items.revers()
+        self.items.reverse()
 
     def sort(self, cmp=None, key=None, reverse=False):
         self.items.sort(cmp=None, key=None, reverse=False)
 
 class DebuggingHooks(fuzznet.ProxyHooks):
 
-    def __init__(self, debugger, crash_folder="metadata", max_streams=10, max_pkts_per_stream=10, crash_timeout=0.1):
+    def __init__(self, debugger, sessid, crash_folder="metadata", restart_delay=0, max_streams=10,
+                 max_pkts_per_stream=10, crash_timeout=0.01):
         self.debugger = debugger
+        self.sessid = sessid
+        self.stream_counter = 0
+        self.restart_delay = restart_delay
         if not os.path.isdir(crash_folder):
             os.makedirs(os.path.join(os.path.abspath(os.path.curdir), crash_folder))
         self.crash_folder = crash_folder
-#         self.crash_event = threading.Event()
         self.crash_events = Queue.Queue()
         self.streams = Dequeue(maxlen=max_streams)
         self.max_pkts_per_stream = max_pkts_per_stream
         self.crash_timeout = crash_timeout
         thread.start_new_thread(debugger.watch, (self.on_signal, self.on_event, self.on_exit))
+        super(DebuggingHooks, self).__init__()
 
     def _get_stream(self, socket_):
         for stream in self.streams:
@@ -122,12 +128,17 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         return None
 
     def _get_stream_history(self):
-        return [stream.values()[0] for stream in self.streams]
+        history = []
+        for stream in self.streams:
+            history.append([binascii.hexlify(pkt) for pkt in stream.values()[0]])
+        # Remove the stream causing the crash from history
+        history.pop()
+        return history
 
     def _to_tuple(self, socket_):
         server_tuple = socket_.getpeername()
         client_tuple = socket_.getsockname()
-        return(client_tuple, server_tuple)
+        return client_tuple, server_tuple
 
     def pre_upstream_send(self, socket_, data):
         stream = self._get_stream(socket_)
@@ -138,13 +149,16 @@ class DebuggingHooks(fuzznet.ProxyHooks):
             self.streams.remove(stream)
             stream[socket_].append(data)
             self.streams.append(stream)
+        self.stream_counter += 1
         return data
 
     def post_upstream_send(self, socket_, data):
         try:
             crash_report = self.crash_events.get(timeout=self.crash_timeout)
+            # Stream which caused the crash
             crash_report.stream = [binascii.hexlify(pkt) for pkt in self._get_stream(socket_).values()[0]]
             # Populate history
+            crash_report.history = self._get_stream_history()
             crash_file_name = os.path.join(self.crash_folder, "%s.json" % crash_report.pid)
             with open(crash_file_name, "w") as f:
                 crash_report.to_json(f)
@@ -156,7 +170,30 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         process = signal_.process
         signum = signal_.signum
         if signum in fuzzmon.crash_signals:
-            crash_report = fuzzmon.CrashReport(process.pid, signum, time.time())
+            crash_report = fuzzmon.CrashReport(self.sessid, process.pid, signum, self.stream_counter)
+            # Populate registers, maps, backtrace, disassembly if available
+            try:
+                process.dumpRegs(log=crash_report.dump_regs)
+            except (NotImplementedError, perror.PtraceError):
+                pass
+            try:
+                process.dumpMaps(log=crash_report.dump_maps)
+            except (NotImplementedError, perror.PtraceError):
+                pass
+            try:
+                process.dumpStack(log=crash_report.dump_stack)
+            except (NotImplementedError, perror.PtraceError):
+                pass
+            try:
+                for frame in process.getBacktrace():
+                    crash_report.dump_backtrace(frame)
+            except (NotImplementedError, perror.PtraceError):
+                pass
+            try:
+                for instr in process.disassemble():
+                    crash_report.dump_code(instr)
+            except (NotImplementedError, perror.PtraceError):
+                pass
             self.crash_events.put(crash_report)
         process.cont(signum)
 
@@ -165,5 +202,9 @@ class DebuggingHooks(fuzznet.ProxyHooks):
 
     def on_exit(self, event):
         process = event.process
-        print(process.pid)
-        # Restart process
+        if self.restart_delay >= 0:
+            time.sleep(self.restart_delay)
+            self.debugger.spawn_traced_process()
+        else:
+            self.debugger.stop()
+            self.is_done = True
