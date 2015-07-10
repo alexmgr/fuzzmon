@@ -2,7 +2,6 @@
 
 import collections
 import json
-import re
 import signal
 import subprocess
 import time
@@ -40,6 +39,7 @@ class PtraceDbg(pdbg.Application):
         self.setupDebugger()
         self.spawn_traced_process()
         self.is_running = False
+        super(PtraceDbg, self).__init__()
 
     def spawn_traced_process(self):
         try:

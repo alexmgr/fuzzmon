@@ -11,6 +11,7 @@ from fuzz_proxy.network import Downstream
 
 proto_table = dict(tcp=socket.SOCK_STREAM, udp=socket.SOCK_DGRAM)
 
+
 def socket_type(str_):
     try:
         proto, remaining = str_.split(":", 1)
@@ -27,6 +28,7 @@ def socket_type(str_):
         raise argparse.ArgumentTypeError("Invalid protocol descirption argument. Expecting proto:host:port or "
                                          "proto:uds:file")
     return family, proto, info
+
 
 def prepare_parser():
     parser = argparse.ArgumentParser(description="A proxy which monitors the backend application state")

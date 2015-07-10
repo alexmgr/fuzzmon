@@ -8,6 +8,7 @@ class StreamDirection(object):
     UPSTREAM = "upstream"
     DOWNSTREAM = "downstream"
 
+
 class ProxyHooks(object):
 
     def __init__(self):
@@ -25,6 +26,7 @@ class ProxyHooks(object):
     def post_upstream_send(self, socket_, data):
         return True
 
+
 class Upstream(object):
 
     def __init__(self, socket_):
@@ -37,6 +39,7 @@ class Upstream(object):
             return self.socket_
         except socket.error:
             return None
+
 
 class Downstream(object):
 
@@ -74,8 +77,8 @@ class Downstream(object):
         downstream_client_socket, client_addr = self.downstream_socket.accept()
         upstream_client_socket = Upstream(self.upstream_socket).connect(self.upstream_address)
         if upstream_client_socket is not None:
-            self.channels.append({StreamDirection.DOWNSTREAM:downstream_client_socket,
-                                  StreamDirection.UPSTREAM:upstream_client_socket})
+            self.channels.append({StreamDirection.DOWNSTREAM: downstream_client_socket,
+                                  StreamDirection.UPSTREAM: upstream_client_socket})
             self.inputs.append(downstream_client_socket)
             self.inputs.append(upstream_client_socket)
         else:
@@ -134,7 +137,7 @@ class Downstream(object):
 
     def _direction(self, socket_):
         channel = self._get_socket_pair(socket_)
-        for k,v in channel.iteritems():
+        for k, v in channel.items():
             if v == socket_:
                 return k
         return None

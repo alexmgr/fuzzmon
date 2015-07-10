@@ -2,9 +2,12 @@
 
 import binascii
 import os
-import Queue
+try:
+    import Queue as queue
+except ImportError:
+    import queue
 import time
-import thread
+import threading
 
 import ptrace.error as perror
 
@@ -45,7 +48,7 @@ class Dequeue(object):
         self.items[key] = value
 
     def __delitem__(self, key):
-        del(self.items[key])
+        del (self.items[key])
 
     def __repr__(self):
         return repr(self.items)
@@ -101,24 +104,27 @@ class Dequeue(object):
         self.items.reverse()
 
     def sort(self, cmp=None, key=None, reverse=False):
-        self.items.sort(cmp=None, key=None, reverse=False)
+        self.items.sort(cmp=cmp, key=key, reverse=reverse)
+
 
 class DebuggingHooks(fuzznet.ProxyHooks):
-
     def __init__(self, debugger, sessid, crash_folder="metadata", restart_delay=0, max_streams=10,
                  max_pkts_per_stream=10, crash_timeout=0.01):
         self.debugger = debugger
         self.sessid = sessid
-        self.stream_counter = 0
+        # First stream will get id 0
+        self.stream_counter = -1
         self.restart_delay = restart_delay
         if not os.path.isdir(crash_folder):
             os.makedirs(os.path.join(os.path.abspath(os.path.curdir), crash_folder))
         self.crash_folder = crash_folder
-        self.crash_events = Queue.Queue()
+        self.crash_events = queue.Queue()
         self.streams = Dequeue(maxlen=max_streams)
         self.max_pkts_per_stream = max_pkts_per_stream
         self.crash_timeout = crash_timeout
-        thread.start_new_thread(debugger.watch, (self.on_signal, self.on_event, self.on_exit))
+        threading.Thread(target=debugger.watch,
+                         args=(self.on_signal, self.on_event, self.on_exit)
+                        ).start()
         super(DebuggingHooks, self).__init__()
 
     def _get_stream(self, socket_):
@@ -144,12 +150,12 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         stream = self._get_stream(socket_)
         if stream is None:
             stream = Dequeue([data], maxlen=self.max_pkts_per_stream)
-            self.streams.append({socket_:stream})
+            self.streams.append({socket_: stream})
+            self.stream_counter += 1
         else:
             self.streams.remove(stream)
             stream[socket_].append(data)
             self.streams.append(stream)
-        self.stream_counter += 1
         return data
 
     def post_upstream_send(self, socket_, data):
@@ -163,7 +169,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
             with open(crash_file_name, "w") as f:
                 crash_report.to_json(f)
             return False
-        except Queue.Empty:
+        except queue.Empty:
             return True
 
     def on_signal(self, signal_):
@@ -201,7 +207,6 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         pass
 
     def on_exit(self, event):
-        process = event.process
         if self.restart_delay >= 0:
             time.sleep(self.restart_delay)
             self.debugger.spawn_traced_process()
