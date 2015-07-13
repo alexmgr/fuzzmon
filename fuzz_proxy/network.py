@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import select
 import socket
 
@@ -36,8 +37,10 @@ class Upstream(object):
     def connect(self, connect_data):
         try:
             self.socket_.connect(connect_data)
+            logging.debug("Successfully connected to upstream server %s: %s" % (connect_data, self.socket_))
             return self.socket_
         except socket.error:
+            logging.error()
             return None
 
 
@@ -54,6 +57,7 @@ class Downstream(object):
 
     def serve(self, buffer_size=4096, timeout=None):
         self.is_running = True
+        logging.info("Downstream server listening for new connections")
         while self.is_running and not self.proxy_hook.is_done:
             if timeout is None:
                 read_ready, _, _ = select.select(self.inputs, [], [])
@@ -75,13 +79,17 @@ class Downstream(object):
 
     def _on_accept(self):
         downstream_client_socket, client_addr = self.downstream_socket.accept()
+        logging.debug("New downstream connection from %s: %s" % (client_addr, downstream_client_socket))
         upstream_client_socket = Upstream(self.upstream_socket).connect(self.upstream_address)
         if upstream_client_socket is not None:
-            self.channels.append({StreamDirection.DOWNSTREAM: downstream_client_socket,
-                                  StreamDirection.UPSTREAM: upstream_client_socket})
+            channel = {StreamDirection.DOWNSTREAM: downstream_client_socket,
+                       StreamDirection.UPSTREAM: upstream_client_socket}
+            self.channels.append(channel)
             self.inputs.append(downstream_client_socket)
             self.inputs.append(upstream_client_socket)
+            logging.debug("Created new socket pair for stream: %s" % channel)
         else:
+            logging.error("Failed to connect to upstream server. Closing downstream: %s" % downstream_client_socket)
             downstream_client_socket.close()
 
     def _on_read(self, socket_, data):
@@ -89,23 +97,29 @@ class Downstream(object):
         if other_socket is not None:
             if self.proxy_hook is not None:
                 if self._direction(other_socket) == StreamDirection.UPSTREAM:
+                    logging.debug("Received data downstream: %s. Forwarding to: %s" % (socket_, other_socket))
                     data = self.proxy_hook.pre_upstream_send(other_socket, data)
                     other_socket.send(data)
                     is_alive = self.proxy_hook.post_upstream_send(other_socket, data)
                 elif self._direction(other_socket) == StreamDirection.DOWNSTREAM:
+                    logging.debug("Received data upstream: %s. Forwarding to: %s" % (socket_, other_socket))
                     data = self.proxy_hook.pre_downstream_send(other_socket, data)
                     other_socket.send(data)
                     is_alive = self.proxy_hook.post_downstream_send(other_socket, data)
                 else:
+                    logging.error("Unknown proxy state for current connection")
                     raise RuntimeWarning("Unknown proxy state for current connection")
                 if not is_alive:
+                    logging.warn("Upstream server appears to be dead: %s" % socket_)
                     self._on_close(socket_)
             else:
                 other_socket.send(data)
         else:
+            logging.warn("No socket pair found for socket: %s" % socket_)
             self._on_close(socket_)
 
     def _on_close(self, socket_):
+        logging.debug("Removing sockets from select() loop")
         other_socket = self._other(socket_)
         if self._get_socket_pair(socket_) in self.channels:
             self.channels.remove(self._get_socket_pair(socket_))
@@ -115,10 +129,12 @@ class Downstream(object):
             self.inputs.remove(other_socket)
         try:
             socket_.close()
+            logging.debug("Closing socket: %s" % socket_)
         except socket.error:
             pass
         try:
             other_socket.close()
+            logging.debug("Closing socket: %s" % other_socket)
         except (socket.error, AttributeError):
             pass
 

@@ -2,6 +2,7 @@
 
 import collections
 import json
+import logging
 import signal
 import subprocess
 import time
@@ -46,7 +47,9 @@ class PtraceDbg(pdbg.Application):
             process = self.createProcess()
         except pdbg.child.ChildError as ce:
             raise IOError("Failed to create traced process: %s => %s" % (" ".join(self.program), ce))
+        logging.info("Successfully attached to process: %d" % process.pid)
         process.cont()
+        logging.info("Moving process to running state: %d" % process.pid)
         self.processes.append(process)
         return process
 
@@ -54,13 +57,16 @@ class PtraceDbg(pdbg.Application):
         for process in self.processes:
             process.detach()
             self.processes.remove(process)
+            logging.warn("Detached from process: %d" % process.pid)
         self.is_running = False
 
     def watch(self, on_signal, on_event, on_exit):
         self.is_running = True
+        logging.info("Debugger entered event monitoring loop")
         while self.is_running and self.processes != []:
             event = self.debugger.waitProcessEvent()
             process = event.process
+            logging.info("Caught event on process: %d. Dispatching to callback" % process.pid)
             if event.__class__ == pdbg.ProcessSignal:
                 on_signal(event)
             elif event.__class__ == pdbg.ProcessEvent:
@@ -72,8 +78,10 @@ class PtraceDbg(pdbg.Application):
             if not process.is_attached:
                 try:
                     self.processes.remove(process)
+                    logging.info("Detected process as dead: %d" % process.pid)
                 except ValueError:
                     pass
+        logging.info("Debugger exiting event monitoring loop")
         self.is_running = False
 
 

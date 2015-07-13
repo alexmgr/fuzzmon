@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import logging
 import socket
 
 from fuzz_proxy.glue import DebuggingHooks
@@ -52,12 +53,18 @@ def prepare_parser():
                                         "Exit cleanly", action="store_true")
     process_control_parser.add_argument("-w", "--wait", help="How long to wait for before restarting the crashed "
                                         "process", type=float, default=0)
+    parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
+                                                                                      "ERROR", "CRITICAL"],
+                        default="INFO")
     parser.add_argument("program", help="The command line to run and attach to", nargs=argparse.REMAINDER)
     return parser
 
 if __name__ == "__main__":
     parser = prepare_parser()
     args = parser.parse_args()
+
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    logging.basicConfig(level=numeric_level)
 
     if args.pid is None and args.program == []:
         parser.print_help()
@@ -76,10 +83,12 @@ if __name__ == "__main__":
     server_socket.setblocking(False)
     server_socket.bind(to_host(args.downstream[2]))
     server_socket.listen(args.conns)
+    logging.info("Downstream socket listening on %s" % str(to_host(args.downstream[2])))
 
     client_socket = socket.socket(args.upstream[0], args.upstream[1])
     client_socket.settimeout(1.0)
     server_address = to_host(args.upstream[2])
+
 
     try:
         dbg = PtraceDbg(args)
