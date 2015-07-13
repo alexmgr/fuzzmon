@@ -38,7 +38,6 @@ class PtraceDbg(pdbg.Application):
         self.processOptions()
         self.debugger = pdbg.debugger.PtraceDebugger()
         self.setupDebugger()
-        self.spawn_traced_process()
         self.is_running = False
         super(PtraceDbg, self).__init__()
 
@@ -61,12 +60,14 @@ class PtraceDbg(pdbg.Application):
         self.is_running = False
 
     def watch(self, on_signal, on_event, on_exit):
+        # Spawning of tracee MUST be done in same thread as event waitProcessEvent() on Linux
+        self.spawn_traced_process()
         self.is_running = True
         logging.info("Debugger entered event monitoring loop")
         while self.is_running and self.processes != []:
             event = self.debugger.waitProcessEvent()
             process = event.process
-            logging.info("Caught event on process: %d. Dispatching to callback" % process.pid)
+            logging.info("Caught event on process: %d => \"%s\". Dispatching to callback" % (process.pid, event))
             if event.__class__ == pdbg.ProcessSignal:
                 on_signal(event)
             elif event.__class__ == pdbg.ProcessEvent:

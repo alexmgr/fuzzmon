@@ -125,7 +125,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         self.crash_timeout = crash_timeout
         threading.Thread(target=debugger.watch,
                          args=(self.on_signal, self.on_event, self.on_exit)
-                        ).start()
+                         ).start()
         super(DebuggingHooks, self).__init__()
 
     def _get_stream(self, socket_):

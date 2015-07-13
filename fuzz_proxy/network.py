@@ -40,7 +40,7 @@ class Upstream(object):
             logging.debug("Successfully connected to upstream server %s: %s" % (connect_data, self.socket_))
             return self.socket_
         except socket.error:
-            logging.error()
+            logging.error("Failed to connect to upstream server %s: %s" % (connect_data, self.socket_))
             return None
 
 
