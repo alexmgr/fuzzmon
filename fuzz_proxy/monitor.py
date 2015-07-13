@@ -3,6 +3,7 @@
 import collections
 import json
 import logging
+import re
 import signal
 import subprocess
 import time
@@ -87,6 +88,14 @@ class PtraceDbg(pdbg.Application):
 
 
 class CrashReport(object):
+
+    # Matches
+    # 'MAPS: 0x00007fb7b25ae000-0x00007fb7b2730000 => /lib/x86_64-linux-gnu/libc-2.13.so (r-xp)'
+    # 'MAPS: 0x0000000000df5000-0x0000000000e16000 => [heap] (rwxp)'
+    # 'MAPS: 0x00007fb7b2b56000-0x00007fb7b2b59000 (rwxp)'
+    # Into start/stop address, binary, permissions
+    MAPS_REGEXP = "MAPS:\s(0x[0-9a-fA-F]+)-(0x[0-9a-fA-F]+)\s(?:=>\s)?(.*?)\s?\((.+)\)"
+
     def __init__(self, sessid, pid, signum, stream_id):
         self.pid = pid
         self.sessid = sessid
@@ -100,6 +109,7 @@ class CrashReport(object):
         self.maps = []
         self.stream = []
         self.history = []
+        self.regexp = re.compile(CrashReport.MAPS_REGEXP)
 
     def to_json(self, f):
         json.dump({"session_id": self.sessid,
@@ -125,7 +135,11 @@ class CrashReport(object):
             pass
 
     def dump_maps(self, str_):
-        pass
+        try:
+            start_addr, stop_addr, binary, perms = self.regexp.match(str_).groups()
+            self.maps.append(((start_addr, stop_addr), binary, perms))
+        except ValueError:
+            pass
 
     def dump_stack(self, str_):
         try:
