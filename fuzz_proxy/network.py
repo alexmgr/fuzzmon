@@ -109,12 +109,18 @@ class Downstream(object):
                 if self._direction(other_socket) == StreamDirection.UPSTREAM:
                     self.logger.debug("Received data downstream: %s. Forwarding to: %s" % (socket_, other_socket))
                     data = self.proxy_hook.pre_upstream_send(other_socket, data)
-                    other_socket.send(data)
+                    try:
+                        other_socket.send(data)
+                    except socket.error as se:
+                        self.logger.warning("Upstream socket appears to be dead: %s" % other_socket)
                     is_alive = self.proxy_hook.post_upstream_send(other_socket, data)
                 elif self._direction(other_socket) == StreamDirection.DOWNSTREAM:
                     self.logger.debug("Received data upstream: %s. Forwarding to: %s" % (socket_, other_socket))
                     data = self.proxy_hook.pre_downstream_send(other_socket, data)
-                    other_socket.send(data)
+                    try:
+                        other_socket.send(data)
+                    except socket.error as se:
+                        self.logger.warning("Downstream socket appears to be dead: %s" % other_socket)
                     is_alive = self.proxy_hook.post_downstream_send(other_socket, data)
                 else:
                     self.logger.error("Unknown proxy state for current connection")
