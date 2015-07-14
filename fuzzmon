@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import binascii
 import logging
+import os
 import socket
 
 from fuzz_proxy.glue import DebuggingHooks
@@ -52,7 +54,7 @@ def prepare_parser():
     process_control_parser.add_argument("-q", "--quit", help="Do not restart the program after a fault is detected. "
                                         "Exit cleanly", action="store_true")
     process_control_parser.add_argument("-w", "--wait", help="How long to wait for before restarting the crashed "
-                                        "process", type=float, default=0)
+                                        "process", type=float, default=30)
     parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
                                                                                       "ERROR", "CRITICAL"],
                         default="INFO")
@@ -75,6 +77,9 @@ if __name__ == "__main__":
 
     if args.quit:
         args.wait = -1
+
+    if args.session is None:
+        args.session = binascii.hexlify(os.urandom(20))
 
     to_host = lambda x: x[0] if len(x) == 1 else x
 
