@@ -9,6 +9,7 @@ import subprocess
 import time
 
 import ptrace.debugger as pdbg
+import ptrace.error as perror
 import ptrace.signames
 
 crash_signals = (signal.SIGILL, signal.SIGABRT, signal.SIGFPE, signal.SIGBUS, signal.SIGSEGV, signal.SIGSYS)
@@ -56,9 +57,12 @@ class PtraceDbg(pdbg.Application):
 
     def stop(self):
         for process in self.processes:
-            process.detach()
-            self.processes.remove(process)
-            self.logger.warn("Detached from process: %d" % process.pid)
+            try:
+                process.detach()
+                self.processes.remove(process)
+                self.logger.warn("Detached from process: %d" % process.pid)
+            except perror.PtraceError:
+                pass
         self.is_running = False
 
     def watch(self, on_signal, on_event, on_exit):

@@ -5,13 +5,17 @@ import argparse
 import binascii
 import logging
 import os
+import signal
 import socket
+import sys
 
 from fuzz_proxy.glue import DebuggingHooks
 from fuzz_proxy.monitor import PtraceDbg
 from fuzz_proxy.network import Downstream
 
-
+# Need to have these global for access in the sigint handler
+dbg = None
+server = None
 proto_table = dict(tcp=socket.SOCK_STREAM, udp=socket.SOCK_DGRAM)
 
 
@@ -32,6 +36,12 @@ def socket_type(str_):
                                          "proto:uds:file")
     return family, proto, info
 
+def sigint_handler(signal, frame):
+    if dbg is not None:
+        dbg.stop()
+    if server is not None:
+        server.is_running = False
+    sys.exit(0)
 
 def prepare_parser():
     parser = argparse.ArgumentParser(description="A proxy which monitors the backend application state")
@@ -94,6 +104,7 @@ if __name__ == "__main__":
     client_socket.settimeout(1.0)
     server_address = to_host(args.upstream[2])
 
+    signal.signal(signal.SIGINT, sigint_handler)
 
     try:
         dbg = PtraceDbg(args)
