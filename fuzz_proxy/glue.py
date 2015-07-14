@@ -123,6 +123,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         self.streams = Dequeue(maxlen=max_streams)
         self.max_pkts_per_stream = max_pkts_per_stream
         self.crash_timeout = crash_timeout
+        self.logger = logging.getLogger("DebuggingHooks")
         threading.Thread(target=debugger.watch,
                          args=(self.on_signal, self.on_event, self.on_exit)
                          ).start()
@@ -148,43 +149,43 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         return client_tuple, server_tuple
 
     def pre_upstream_send(self, socket_, data):
-        logging.debug("Entering pre upstream send callback: %s" % socket_)
+        self.logger.debug("Entering pre upstream send callback: %s" % socket_)
         stream = self._get_stream(socket_)
         if stream is None:
             stream = Dequeue([data], maxlen=self.max_pkts_per_stream)
             self.streams.append({socket_: stream})
             self.stream_counter += 1
-            logging.debug("Creating new stream %d: %s" % (self.stream_counter, stream))
+            self.logger.debug("Creating new stream %d: %s" % (self.stream_counter, stream))
         else:
             self.streams.remove(stream)
             stream[socket_].append(data)
             self.streams.append(stream)
-            logging.debug("Appending data to existing stream: %s" % stream)
+            self.logger.debug("Appending data to existing stream: %s" % stream)
         return data
 
     def post_upstream_send(self, socket_, data):
-        logging.info("Entering post upstream send callback: %s" % socket_)
+        self.logger.info("Entering post upstream send callback: %s" % socket_)
         try:
             crash_report = self.crash_events.get(timeout=self.crash_timeout)
-            logging.warn("Upstream server crashed!")
+            self.logger.warn("Upstream server crashed!")
             # Stream which caused the crash
             crash_report.stream = [binascii.hexlify(pkt) for pkt in self._get_stream(socket_).values()[0]]
             # Populate history
             crash_report.history = self._get_stream_history()
             crash_file_name = os.path.join(self.crash_folder, "%s.json" % crash_report.pid)
-            logging.info("Dumping crash information to: %s" % crash_file_name)
+            self.logger.info("Dumping crash information to: %s" % crash_file_name)
             with open(crash_file_name, "w") as f:
                 crash_report.to_json(f)
             return False
         except queue.Empty:
-            logging.debug("No upstream crash detected")
+            self.logger.debug("No upstream crash detected")
             return True
 
     def on_signal(self, signal_):
         process = signal_.process
         signum = signal_.signum
         if signum in fuzzmon.crash_signals:
-            logging.warn("Received signal %d from process: %d. Gathering crash information" % (signum, process.pid))
+            self.logger.warn("Received signal %d from process: %d. Gathering crash information" % (signum, process.pid))
             crash_report = fuzzmon.CrashReport(self.sessid, process.pid, signum, self.stream_counter)
             # Populate registers, maps, backtrace, disassembly if available
             try:
@@ -210,7 +211,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
             except (NotImplementedError, perror.PtraceError):
                 pass
             self.crash_events.put(crash_report)
-        logging.warn("Propagating signal %d to child process: %d" % (signum, process.pid))
+        self.logger.warn("Propagating signal %d to child process: %d" % (signum, process.pid))
         process.cont(signum)
 
     def on_event(self, event):
@@ -218,11 +219,11 @@ class DebuggingHooks(fuzznet.ProxyHooks):
 
     def on_exit(self, event):
         if self.restart_delay >= 0:
-            logging.warn("Waiting %d seconds before restarting process" % self.restart_delay)
+            self.logger.warn("Waiting %d seconds before restarting process" % self.restart_delay)
             time.sleep(self.restart_delay)
             process = self.debugger.spawn_traced_process()
-            logging.warn("Spawned new target process: %d" % process.pid)
+            self.logger.warn("Spawned new target process: %d" % process.pid)
         else:
             self.debugger.stop()
             self.is_done = True
-            logging.warn("Stopped debugger. Exiting now")
+            self.logger.warn("Stopped debugger. Exiting now")
