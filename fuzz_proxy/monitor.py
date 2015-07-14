@@ -3,6 +3,7 @@
 import collections
 import json
 import logging
+import os
 import re
 import signal
 import subprocess
@@ -61,17 +62,31 @@ class PtraceDbg(pdbg.Application):
                 process.detach()
                 self.processes.remove(process)
                 self.logger.warn("Detached from process: %d" % process.pid)
+                process.terminate()
+                self.logger.warn("Terminated process: %d" % process.pid)
             except perror.PtraceError:
                 pass
         self.is_running = False
 
     def watch(self, on_signal, on_event, on_exit):
         # Spawning of tracee MUST be done in same thread as event waitProcessEvent() on Linux
-        self.spawn_traced_process()
+        try:
+            self.spawn_traced_process()
+        except IOError as ioe:
+            self.logger.fatal(ioe)
+            # This is realy ugly, it relies on the fuzzmon sigint handler to exit
+            # TODO: Implement a queue to relay thread satus to spawner
+            os.kill(os.getpid(), signal.SIGINT)
+            return
         self.is_running = True
         self.logger.info("Debugger entered event monitoring loop")
         while self.is_running and self.processes != []:
-            event = self.debugger.waitProcessEvent()
+            try:
+                event = self.debugger.waitProcessEvent()
+            except OSError as oe:
+                self.logger.fatal("Debugger event loop failed: %s" % oe)
+                self.stop()
+                return
             process = event.process
             self.logger.info("Caught event on process: %d => \"%s\". Dispatching to callback" % (process.pid, event))
             if event.__class__ == pdbg.ProcessSignal:

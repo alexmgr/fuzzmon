@@ -19,5 +19,6 @@ dist/
 .DS_Store
 tests/integration/vuln-server
 metadata
+*.spec
 
 

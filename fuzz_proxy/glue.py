@@ -124,7 +124,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         self.max_pkts_per_stream = max_pkts_per_stream
         self.crash_timeout = crash_timeout
         self.logger = logging.getLogger("DebuggingHooks")
-        threading.Thread(target=debugger.watch,
+        threading.Thread(target=self.debugger.watch,
                          args=(self.on_signal, self.on_event, self.on_exit)
                          ).start()
         super(DebuggingHooks, self).__init__()
@@ -212,18 +212,29 @@ class DebuggingHooks(fuzznet.ProxyHooks):
                 pass
             self.crash_events.put(crash_report)
         self.logger.warn("Propagating signal %d to child process: %d" % (signum, process.pid))
-        process.cont(signum)
+        try:
+            process.cont(signum)
+        except perror.PtraceError as pe:
+            self.logger.critical("Failed to propagate signal to traced process: %s" % pe)
+            self._shutdown()
 
     def on_event(self, event):
         pass
+
+    def _shutdown(self):
+        self.debugger.stop()
+        self.is_done = True
+        self.logger.warn("Stopped debugger. Exiting now")
 
     def on_exit(self, event):
         if self.restart_delay >= 0:
             self.logger.warn("Waiting %d seconds before restarting process" % self.restart_delay)
             time.sleep(self.restart_delay)
-            process = self.debugger.spawn_traced_process()
-            self.logger.warn("Spawned new target process: %d" % process.pid)
+            try:
+                process = self.debugger.spawn_traced_process()
+                self.logger.warn("Spawned new target process: %d" % process.pid)
+            except IOError as ioe:
+                self.logger.fatal(ioe)
+                self._shutdown()
         else:
-            self.debugger.stop()
-            self.is_done = True
-            self.logger.warn("Stopped debugger. Exiting now")
+            self._shutdown()

@@ -40,7 +40,7 @@ def sigint_handler(signal, frame):
     if dbg is not None:
         dbg.stop()
     if server is not None:
-        server.is_running = False
+        server.stop()
     sys.exit(0)
 
 def prepare_parser():
@@ -64,7 +64,7 @@ def prepare_parser():
     process_control_parser.add_argument("-q", "--quit", help="Do not restart the program after a fault is detected. "
                                         "Exit cleanly", action="store_true")
     process_control_parser.add_argument("-w", "--wait", help="How long to wait for before restarting the crashed "
-                                        "process", type=float, default=30)
+                                        "process", type=float, default=10)
     parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
                                                                                       "ERROR", "CRITICAL"],
                         default="INFO")
@@ -93,25 +93,29 @@ if __name__ == "__main__":
 
     to_host = lambda x: x[0] if len(x) == 1 else x
 
-    server_socket = socket.socket(args.downstream[0], args.downstream[1])
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.setblocking(False)
-    server_socket.bind(to_host(args.downstream[2]))
-    server_socket.listen(args.conns)
-    logging.info("Downstream socket listening on %s" % str(to_host(args.downstream[2])))
+    try:
+        server_socket = socket.socket(args.downstream[0], args.downstream[1])
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.setblocking(False)
+        server_socket.bind(to_host(args.downstream[2]))
+        server_socket.listen(args.conns)
+        logging.info("Downstream socket listening on %s" % str(to_host(args.downstream[2])))
+    except socket.error as se:
+        parser.exit(2, "Failed to build downstream socket: %s\n" % se)
 
-    client_socket = socket.socket(args.upstream[0], args.upstream[1])
-    client_socket.settimeout(1.0)
-    server_address = to_host(args.upstream[2])
+    try:
+        client_socket = socket.socket(args.upstream[0], args.upstream[1])
+        client_socket.settimeout(1.0)
+        server_address = to_host(args.upstream[2])
+    except socket.error as se:
+        parser.exit(2, "Failed to build upstream socket: %s\n" % se)
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    try:
-        dbg = PtraceDbg(args)
-    except IOError as ioe:
-        parser.exit(3, "ERROR: %s" % str(ioe))
+    dbg = PtraceDbg(args)
 
     hooks = DebuggingHooks(dbg, args.session, args.output, args.wait)
 
     server = Downstream(server_socket, client_socket, server_address, hooks)
     server.serve(timeout=3)
+    server.stop()

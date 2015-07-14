@@ -79,6 +79,14 @@ class Downstream(object):
                         self._on_read(socket_, data)
         self.is_running = False
 
+    def stop(self):
+        self.is_running = False
+        for socket_ in self.inputs:
+            try:
+                socket_.close()
+            except socket.error as se:
+                self.logger.debug("Failed to gracefully close socket: %s" % socket_)
+
     def _on_accept(self):
         downstream_client_socket, client_addr = self.downstream_socket.accept()
         self.logger.debug("New downstream connection from %s: %s" % (client_addr, downstream_client_socket))
