@@ -15,7 +15,7 @@ setup(
     keywords=["proxy", "fuzzing", "debugger", "ptrace", "bsd"],
     url="https://github.com/alexmgr/fuzzmon",
     install_requires=["python-ptrace", "distorm3"],
-    scripts=["fuzzmon"],
+    scripts=["fuzzmon", "fuzzreplay"],
     test_suite="nose.collector",
     tests_require=["nose"]
 )
