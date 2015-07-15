@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import argparse
+import binascii
+import json
+import socket
+import sys
+import time
+
+from fuzz_proxy.helpers import socket_type, to_host
+
+
+def replay_stream(socket_info, stream, timeout=1.0, buf=4096):
+    client = None
+    succeeded = True
+    bin_stream = "".join([binascii.unhexlify(pkt) for pkt in stream])
+    try:
+        client = socket.socket(socket_info[0], socket_info[1])
+        client.settimeout(timeout)
+        client.connect(to_host(socket_info[2]))
+        client.sendall(bin_stream)
+        client.recv(buf)
+    except socket.error:
+        succeeded = False
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except socket.error:
+                pass
+    return succeeded
+
+
+def is_alive(socket_info, timeout=1.0):
+    return replay_stream(socket_info, [], timeout)
+
+
+def prepare_parser():
+    parser = argparse.ArgumentParser(description="Replay streams captured by fuzzmon")
+    parser.add_argument("filename", help="JSON test case to replay", type=argparse.FileType('r'))
+    parser.add_argument("-u", "--upstream", help="Upstream server to which to connect. Format is proto:host:port or "
+                                                 "uds:proto:file for Unix Domain Sockets", type=socket_type,
+                        required=True)
+    parser.add_argument("-a", "--all", help="Also replay all packets from history", action="store_true")
+    parser.add_argument("-w", "--wait", help="Time to wait before performing alive test. Default is 5 seconds",
+                        type=float, default=5.0)
+    return parser
+
+
+if __name__ == "__main__":
+    parser = prepare_parser()
+    args = parser.parse_args()
+
+    metadata = json.load(args.filename)
+
+    if args.all:
+        streams = metadata["history"]
+        streams.append(metadata["stream"])
+    else:
+        streams = [metadata["stream"]]
+
+    crash_detected = False
+    for i, stream in enumerate(streams):
+        has_replayed = replay_stream(args.upstream, stream)
+        time.sleep(args.wait)
+        has_crashed = not is_alive(args.upstream)
+        if has_crashed:
+            crash_detected = True
+            print("Successfully crashed server by replaying stream %d: %s" % (i, "".join([pkt for pkt in stream])))
+
+    sys.exit(0 if crash_detected else 1)

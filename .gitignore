@@ -20,5 +20,4 @@ dist/
 tests/integration/vuln-server
 metadata
 *.spec
-
-
+*.json

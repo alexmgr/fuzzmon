@@ -12,29 +12,13 @@ import sys
 from fuzz_proxy.glue import DebuggingHooks
 from fuzz_proxy.monitor import PtraceDbg
 from fuzz_proxy.network import Downstream
+from fuzz_proxy.helpers import socket_type, to_host
+
 
 # Need to have these global for access in the sigint handler
 dbg = None
 server = None
-proto_table = dict(tcp=socket.SOCK_STREAM, udp=socket.SOCK_DGRAM)
 
-
-def socket_type(str_):
-    try:
-        proto, remaining = str_.split(":", 1)
-        proto = proto_table[proto.lower()]
-        host, port = remaining.rsplit(":", 1)
-        if host.lower() == "uds":
-            family = socket.AF_UNIX
-            info = (port,)
-        else:
-            # v4 preferred if fqdn used
-            family = socket.getaddrinfo(host, port)[0][0]
-            info = (host, int(port))
-    except (ValueError, KeyError, socket.gaierror):
-        raise argparse.ArgumentTypeError("Invalid protocol descirption argument. Expecting proto:host:port or "
-                                         "proto:uds:file")
-    return family, proto, info
 
 def sigint_handler(signal, frame):
     if dbg is not None:
@@ -43,33 +27,37 @@ def sigint_handler(signal, frame):
         server.stop()
     sys.exit(0)
 
+
 def prepare_parser():
     parser = argparse.ArgumentParser(description="A proxy which monitors the backend application state")
     parser.add_argument("-p", "--pid", help="Attach running process specified by its identifier", type=int,
                         default=None)
     parser.add_argument("-u", "--upstream", help="Upstream server to which to connect. Format is proto:host:port or "
-                        "uds:proto:file for Unix Domain Sockets", type=socket_type, required=True)
+                                                 "uds:proto:file for Unix Domain Sockets", type=socket_type,
+                        required=True)
     parser.add_argument("-d", "--downstream", help="IP and port to bind to, or UDS. Format is proto:host:port or "
-                        "uds:proto:file. By default, listen to TCP connections on port 25746", type=socket_type,
+                                                   "uds:proto:file. By default, listen to TCP connections on port 25746",
+                        type=socket_type,
                         default="tcp:0.0.0.0:25746")
     parser.add_argument("-o", "--output", help="Output folder where to store the crash metadata", default="metadata")
     parser.add_argument("-s", "--session", help="A session identifier for the fuzzing session")
     parser.add_argument("-f", "--fork", help="Trace fork and child process", action="store_true")
     parser.add_argument("-e", "--trace-exec", help="Trace execve() event", action="store_true")
     parser.add_argument("-n", "--no-stdout", help="Use /dev/null as stdout/stderr, or close stdout and stderr if "
-                        "/dev/null doesn't exist", action="store_true")
+                                                  "/dev/null doesn't exist", action="store_true")
     parser.add_argument("-c", "--conns", help="Number of downstream connections to accept in parallel. Default is 1",
                         type=int, default=1)
     process_control_parser = parser.add_mutually_exclusive_group()
     process_control_parser.add_argument("-q", "--quit", help="Do not restart the program after a fault is detected. "
-                                        "Exit cleanly", action="store_true")
+                                                             "Exit cleanly", action="store_true")
     process_control_parser.add_argument("-w", "--wait", help="How long to wait for before restarting the crashed "
-                                        "process", type=float, default=10)
+                                                             "process", type=float, default=10)
     parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
                                                                                       "ERROR", "CRITICAL"],
                         default="INFO")
     parser.add_argument("program", help="The command line to run and attach to", nargs=argparse.REMAINDER)
     return parser
+
 
 if __name__ == "__main__":
     parser = prepare_parser()
@@ -90,8 +78,6 @@ if __name__ == "__main__":
 
     if args.session is None:
         args.session = binascii.hexlify(os.urandom(20))
-
-    to_host = lambda x: x[0] if len(x) == 1 else x
 
     try:
         server_socket = socket.socket(args.downstream[0], args.downstream[1])
