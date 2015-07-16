@@ -14,13 +14,12 @@ from fuzz_proxy.helpers import socket_type, to_host
 def replay_stream(socket_info, stream, timeout=1.0, buf=4096):
     client = None
     succeeded = True
-    bin_stream = "".join([binascii.unhexlify(pkt) for pkt in stream])
     try:
         client = socket.socket(socket_info[0], socket_info[1])
         client.settimeout(timeout)
         client.connect(to_host(socket_info[2]))
-        client.sendall(bin_stream)
-        client.recv(buf)
+        for pkt in stream:
+            client.sendall(binascii.unhexlify(pkt))
     except socket.error:
         succeeded = False
     finally:
@@ -43,8 +42,8 @@ def prepare_parser():
                                                  "uds:proto:file for Unix Domain Sockets", type=socket_type,
                         required=True)
     parser.add_argument("-a", "--all", help="Also replay all packets from history", action="store_true")
-    parser.add_argument("-w", "--wait", help="Time to wait before performing alive test. Default is 5 seconds",
-                        type=float, default=5.0)
+    parser.add_argument("-w", "--wait", help="Time to wait before performing alive test. Default is 3 seconds",
+                        type=float, default=3.0)
     return parser
 
 
@@ -65,8 +64,9 @@ if __name__ == "__main__":
         has_replayed = replay_stream(args.upstream, stream)
         time.sleep(args.wait)
         has_crashed = not is_alive(args.upstream)
-        if has_crashed:
+        if has_replayed and has_crashed:
             crash_detected = True
             print("Successfully crashed server by replaying stream %d: %s" % (i, "".join([pkt for pkt in stream])))
+            sys.exit(0)
 
-    sys.exit(0 if crash_detected else 1)
+    sys.exit(1)

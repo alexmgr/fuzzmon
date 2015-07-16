@@ -86,6 +86,7 @@ class Downstream(object):
                 socket_.close()
             except socket.error as se:
                 self.logger.debug("Failed to gracefully close socket: %s" % socket_)
+        self.logger.warn("Stopped downstream server")
 
     def _on_accept(self):
         downstream_client_socket, client_addr = self.downstream_socket.accept()
