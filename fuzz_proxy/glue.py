@@ -38,47 +38,32 @@ class DebuggingHooks(fuzznet.ProxyHooks):
                          ).start()
         super(DebuggingHooks, self).__init__()
 
-    def _get_stream(self, socket_):
+    def _get_stream(self, channel):
         for stream in self.streams:
-            if socket_ in stream.keys():
+            if channel in stream.keys():
                 return stream
         return None
 
     def _get_stream_history(self):
         history = []
         for stream in self.streams:
-            history.append([binascii.hexlify(pkt) for pkt in stream.values()[0]])
+            history.append([(pkt[0], binascii.hexlify(pkt[1])) for pkt in stream.values()[0]])
         # Remove the stream causing the crash from history
         history.pop()
         return history
 
-    def _to_tuple(self, socket_):
-        server_tuple = socket_.getpeername()
-        client_tuple = socket_.getsockname()
-        return client_tuple, server_tuple
+    def pre_upstream_send(self, channel, data):
+        return self._pre_send(channel, data, fuzznet.StreamDirection.UPSTREAM)
 
-    def pre_upstream_send(self, socket_, data):
-        self.logger.debug("Entering pre upstream send callback: %s" % socket_)
-        stream = self._get_stream(socket_)
-        if stream is None:
-            stream = fuzzhelp.Dequeue([data], maxlen=self.max_pkts_per_stream)
-            self.streams.append({socket_: stream})
-            self.stream_counter += 1
-            self.logger.debug("Creating new stream %d: %s" % (self.stream_counter, stream))
-        else:
-            self.streams.remove(stream)
-            stream[socket_].append(data)
-            self.streams.append(stream)
-            self.logger.debug("Appending data to existing stream: %s" % stream)
-        return data
-
-    def post_upstream_send(self, socket_, data):
-        self.logger.info("Entering post upstream send callback: %s" % socket_)
+    def post_upstream_send(self, channel, data):
+        self.logger.debug("Entering post upstream send callback: %s" % channel)
+        immutable_channel = frozenset(channel.items())
         try:
             crash_report = self.crash_events.get(timeout=self.crash_timeout)
             self.logger.warn("Upstream server crashed!")
             # Stream which caused the crash
-            crash_report.stream = [binascii.hexlify(pkt) for pkt in self._get_stream(socket_).values()[0]]
+            crash_report.stream = [(pkt[0], binascii.hexlify(pkt[1])) for pkt in
+                                   self._get_stream(immutable_channel).values()[0]]
             # Populate history
             crash_report.history = self._get_stream_history()
             crash_file_name = os.path.join(self.crash_folder, "%s.json" % crash_report.pid)
@@ -89,6 +74,25 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         except queue.Empty:
             self.logger.debug("No upstream crash detected")
             return True
+
+    def pre_downstream_send(self, channel, data):
+        return self._pre_send(channel, data, fuzznet.StreamDirection.DOWNSTREAM)
+
+    def _pre_send(self, channel, data, direction):
+        self.logger.debug("Entering pre %s send callback: %s" % (direction, channel))
+        immutable_channel = frozenset(channel.items())
+        stream = self._get_stream(immutable_channel)
+        if stream is None:
+            stream = fuzzhelp.Dequeue([(direction, data)], maxlen=self.max_pkts_per_stream)
+            self.streams.append({immutable_channel: stream})
+            self.stream_counter += 1
+            self.logger.debug("Creating new %s stream %d: %s" % (direction, self.stream_counter, stream))
+        else:
+            self.streams.remove(stream)
+            stream[immutable_channel].append((direction, data))
+            self.streams.append(stream)
+            self.logger.debug("Appending data to existing %s stream: %s" % (direction, stream))
+        return data
 
     def on_signal(self, signal_):
         process = signal_.process

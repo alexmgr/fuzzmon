@@ -15,16 +15,16 @@ class ProxyHooks(object):
     def __init__(self):
         self.is_done = False
 
-    def pre_downstream_send(self, socket_, data):
+    def pre_downstream_send(self, channel, data):
         return data
 
-    def post_downstream_send(self, socket_, data):
+    def post_downstream_send(self, channel, data):
         return True
 
-    def pre_upstream_send(self, socket_, data):
+    def pre_upstream_send(self, channel, data):
         return data
 
-    def post_upstream_send(self, socket_, data):
+    def post_upstream_send(self, channel, data):
         return True
 
 
@@ -107,22 +107,23 @@ class Downstream(object):
         other_socket = self._other(socket_)
         if other_socket is not None:
             if self.proxy_hook is not None:
+                channel = self._get_channel(socket_)
                 if self._direction(other_socket) == StreamDirection.UPSTREAM:
                     self.logger.debug("Received data downstream: %s. Forwarding to: %s" % (socket_, other_socket))
-                    data = self.proxy_hook.pre_upstream_send(other_socket, data)
+                    data = self.proxy_hook.pre_upstream_send(channel, data)
                     try:
                         other_socket.send(data)
                     except socket.error as se:
                         self.logger.warning("Upstream socket appears to be dead: %s" % other_socket)
-                    is_alive = self.proxy_hook.post_upstream_send(other_socket, data)
+                    is_alive = self.proxy_hook.post_upstream_send(channel, data)
                 elif self._direction(other_socket) == StreamDirection.DOWNSTREAM:
                     self.logger.debug("Received data upstream: %s. Forwarding to: %s" % (socket_, other_socket))
-                    data = self.proxy_hook.pre_downstream_send(other_socket, data)
+                    data = self.proxy_hook.pre_downstream_send(channel, data)
                     try:
                         other_socket.send(data)
                     except socket.error as se:
                         self.logger.warning("Downstream socket appears to be dead: %s" % other_socket)
-                    is_alive = self.proxy_hook.post_downstream_send(other_socket, data)
+                    is_alive = self.proxy_hook.post_downstream_send(channel, data)
                 else:
                     self.logger.error("Unknown proxy state for current connection")
                     raise RuntimeWarning("Unknown proxy state for current connection")
@@ -138,8 +139,8 @@ class Downstream(object):
     def _on_close(self, socket_):
         self.logger.debug("Removing sockets from select() loop")
         other_socket = self._other(socket_)
-        if self._get_socket_pair(socket_) in self.channels:
-            self.channels.remove(self._get_socket_pair(socket_))
+        if self._get_channel(socket_) in self.channels:
+            self.channels.remove(self._get_channel(socket_))
         if socket_ in self.inputs:
             self.inputs.remove(socket_)
         if other_socket in self.inputs:
@@ -155,21 +156,21 @@ class Downstream(object):
         except (socket.error, AttributeError):
             pass
 
-    def _get_socket_pair(self, socket_):
+    def _get_channel(self, socket_):
         for channel in self.channels:
             if socket_ in channel.values():
                 return channel
         return {}
 
     def _other(self, socket_):
-        channel = self._get_socket_pair(socket_)
+        channel = self._get_channel(socket_)
         for v in channel.values():
             if v != socket_:
                 return v
         return None
 
     def _direction(self, socket_):
-        channel = self._get_socket_pair(socket_)
+        channel = self._get_channel(socket_)
         for k, v in channel.items():
             if v == socket_:
                 return k
