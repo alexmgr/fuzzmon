@@ -12,100 +12,9 @@ import threading
 
 import ptrace.error as perror
 
+import fuzz_proxy.helpers as fuzzhelp
 import fuzz_proxy.monitor as fuzzmon
 import fuzz_proxy.network as fuzznet
-
-
-class Dequeue(object):
-    """ Python collections.deque only supports Hashable entries
-    Quick version backed by a list which supports any type of object
-    """
-
-    def __init__(self, items=[], maxlen=0):
-        if maxlen < 0:
-            raise ValueError("maxlen must be non-negative")
-        if len(items) >= maxlen:
-            self.items = items[-maxlen:]
-        else:
-            self.items = items[:]
-        self.maxlen = maxlen
-
-    def __contains__(self, item):
-        return item in self.items
-
-    def __eq__(self, other):
-        return True if self.items == other.items else False
-
-    def __iter__(self):
-        return iter(self.items)
-
-    def __len__(self):
-        return len(self.items)
-
-    def __getitem__(self, key):
-        return self.items[key]
-
-    def __setitem__(self, key, value):
-        self.items[key] = value
-
-    def __delitem__(self, key):
-        del (self.items[key])
-
-    def __repr__(self):
-        return repr(self.items)
-
-    def __str__(self):
-        return str(self.items)
-
-    def append(self, item):
-        if len(self.items) >= self.maxlen:
-            self.items.remove(self.items[0])
-        self.items.append(item)
-
-    def appendleft(self, item):
-        if len(self.items) >= self.maxlen:
-            self.items.remove(self.items[-1])
-        self.insert(0, item)
-
-    def clear(self):
-        self.items = []
-
-    def count(self, item):
-        return self.items.count(item)
-
-    def extend(self, other):
-        self.maxlen = len(self.items) + len(other)
-        self.items.extend(other)
-
-    def extendleft(self, other):
-        self.maxlen = len(self.items) + len(other)
-        self.items = other[:] + self.items[:]
-
-    def index(self, item):
-        return self.items.index(item)
-
-    def insert(self, key, item):
-        if len(self.items) < self.maxlen:
-            self.items.insert(key, item)
-        else:
-            raise ValueError("Cannot insert in full dequeue list")
-
-    def pop(self):
-        return self.items.pop()
-
-    def popleft(self):
-        first_item = self.items[0]
-        self.items = self.items[1:]
-        return first_item
-
-    def remove(self, v):
-        self.items.remove(v)
-
-    def reverse(self):
-        self.items.reverse()
-
-    def sort(self, cmp=None, key=None, reverse=False):
-        self.items.sort(cmp=cmp, key=key, reverse=reverse)
 
 
 class DebuggingHooks(fuzznet.ProxyHooks):
@@ -120,7 +29,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
             os.makedirs(os.path.join(os.path.abspath(os.path.curdir), crash_folder))
         self.crash_folder = crash_folder
         self.crash_events = queue.Queue()
-        self.streams = Dequeue(maxlen=max_streams)
+        self.streams = fuzzhelp.Dequeue(maxlen=max_streams)
         self.max_pkts_per_stream = max_pkts_per_stream
         self.crash_timeout = crash_timeout
         self.logger = logging.getLogger("DebuggingHooks")
@@ -152,7 +61,7 @@ class DebuggingHooks(fuzznet.ProxyHooks):
         self.logger.debug("Entering pre upstream send callback: %s" % socket_)
         stream = self._get_stream(socket_)
         if stream is None:
-            stream = Dequeue([data], maxlen=self.max_pkts_per_stream)
+            stream = fuzzhelp.Dequeue([data], maxlen=self.max_pkts_per_stream)
             self.streams.append({socket_: stream})
             self.stream_counter += 1
             self.logger.debug("Creating new stream %d: %s" % (self.stream_counter, stream))
