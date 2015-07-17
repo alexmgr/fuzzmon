@@ -188,28 +188,15 @@ class DebuggingHooks(fuzznet.ProxyHooks):
             self.logger.warn("Received signal %d from process: %d. Gathering crash information" % (signum, process.pid))
             crash_report = fuzzmon.CrashReport(self.sessid, process.pid, signum, self.stream_counter)
             # Populate registers, maps, backtrace, disassembly if available
-            try:
-                process.dumpRegs(log=crash_report.dump_regs)
-            except (NotImplementedError, perror.PtraceError):
-                pass
-            try:
-                process.dumpMaps(log=crash_report.dump_maps)
-            except (NotImplementedError, perror.PtraceError):
-                pass
-            try:
-                process.dumpStack(log=crash_report.dump_stack)
-            except (NotImplementedError, perror.PtraceError):
-                pass
-            try:
-                for frame in process.getBacktrace():
-                    crash_report.dump_backtrace(frame)
-            except (NotImplementedError, perror.PtraceError):
-                pass
-            try:
-                for instr in process.disassemble():
-                    crash_report.dump_code(instr)
-            except (NotImplementedError, perror.PtraceError):
-                pass
+            self._ignore_ptrace_errors(process.dumpRegs, crash_report.dump_regs)
+            self._ignore_ptrace_errors(process.dumpMaps, crash_report.dump_maps)
+            self._ignore_ptrace_errors(process.dumpStack, crash_report.dump_stack)
+            frames = self._ignore_ptrace_errors(process.getBacktrace)
+            instrs = self._ignore_ptrace_errors(process.disassemble)
+            for frame in frames:
+                crash_report.dump_backtrace(frame)
+            for instr in instrs:
+                crash_report.dump_code(instr)
             self.crash_events.put(crash_report)
         self.logger.warn("Propagating signal %d to child process: %d" % (signum, process.pid))
         try:
@@ -219,12 +206,9 @@ class DebuggingHooks(fuzznet.ProxyHooks):
             self._shutdown()
 
     def on_event(self, event):
-        pass
-
-    def _shutdown(self):
-        self.debugger.stop()
-        self.is_done = True
-        self.logger.warn("Stopped debugger. Exiting now")
+        self.logger.critical("Currently unhandled event: %s" % event)
+        self.logger.critical("A bug report at https://github.com/alexmgr/fuzzmon would be greatly appreciated")
+        raise NotImplementedError("Currently unhandled event: %s")
 
     def on_exit(self, event):
         if self.restart_delay >= 0:
@@ -238,3 +222,14 @@ class DebuggingHooks(fuzznet.ProxyHooks):
                 self._shutdown()
         else:
             self._shutdown()
+
+    def _shutdown(self):
+        self.debugger.stop()
+        self.is_done = True
+        self.logger.warn("Stopped debugger. Exiting now")
+
+    def _ignore_ptrace_errors(self, func, *args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (NotImplementedError, perror.PtraceError):
+            pass
