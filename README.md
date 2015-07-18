@@ -1,5 +1,8 @@
 # fuzzmon
-An application layer proxy which attaches to the backend server to detect faults. It's purpose is to record and proxy fuzzing traffic from clients, whilst gathering interesting crash information from the target using ptrace.
+
+Ever wished you could just focus on data mutation and not fuzzing instrumentation? Fuzzmon let's you do just that. It takes care of the instrumentation and tracking of fuzzed inputs and let's you focus on building a good data model or fuzzing transform.
+
+It's an application layer proxy which attaches to the backend server to detect faults. It's purpose is to record and proxy fuzzing traffic from clients, whilst gathering interesting crash information from the target using ptrace.
 
 It tries to solve the problem of some network fuzzers: **which input caused which crash?** Since fuzzmon sees both the traffic in flight and the state of the application, it knows which input triggered which crash. It is also fast, since it does not require any form of fuzzing client/server synchronization.
 
