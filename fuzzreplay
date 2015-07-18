@@ -4,14 +4,17 @@
 import argparse
 import binascii
 import json
+import logging
+import os
 import socket
 import sys
 import time
 
-from fuzz_proxy.helpers import socket_type, to_host
+from fuzz_proxy.helpers import colorize, socket_type, to_host, TermColors
+from fuzz_proxy.network import StreamDirection
 
 
-def replay_stream(socket_info, stream, timeout=1.0, buf=4096):
+def replay_stream(socket_info, stream, timeout=1.0, size=4096):
     client = None
     succeeded = True
     try:
@@ -19,9 +22,34 @@ def replay_stream(socket_info, stream, timeout=1.0, buf=4096):
         client.settimeout(timeout)
         client.connect(to_host(socket_info[2]))
         for pkt in stream:
-            client.sendall(binascii.unhexlify(pkt))
-    except socket.error:
+            logging.info("Attempting to replay packet: %s" % pkt)
+            try:
+                if pkt[0] == StreamDirection.UPSTREAM:
+                    logging.info("Got %s packet. Attempting to send" % pkt[0])
+                    client.sendall(binascii.unhexlify(pkt[1]))
+                    logging.debug("Successfully sent data upstream: %s" % pkt[1])
+                elif pkt[0] == StreamDirection.DOWNSTREAM:
+                    logging.info("Got %s packet. Entering receiving mode" % pkt[0])
+                    response = []
+                    while True:
+                        try:
+                            data = client.recv(size)
+                            if data == "":
+                                break
+                            response.append(data)
+                        except socket.timeout:
+                            break
+                    logging.debug("Dumping received data from remote: %s" % binascii.hexlify("".join(response)))
+                    logging.debug("Was expecting: %s" % pkt[1])
+                else:
+                    logging.warn("Invalid packet direction received: %s. Not able to replay packet" % pkt[0])
+                    raise RuntimeWarning()
+            except IndexError:
+                logging.warn("Invalid stream format: %s. Not able to replay packet" % pkt)
+                raise ValueError()
+    except socket.error as se:
         succeeded = False
+        logging.warn("Stream replay failed: %s" % se)
     finally:
         if client is not None:
             try:
@@ -44,6 +72,9 @@ def prepare_parser():
     parser.add_argument("-a", "--all", help="Also replay all packets from history", action="store_true")
     parser.add_argument("-w", "--wait", help="Time to wait before performing alive test. Default is 3 seconds",
                         type=float, default=3.0)
+    parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
+                                                                                      "ERROR", "CRITICAL"],
+                        default="WARNING")
     return parser
 
 
@@ -51,22 +82,39 @@ if __name__ == "__main__":
     parser = prepare_parser()
     args = parser.parse_args()
 
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    logging.basicConfig(level=numeric_level)
+
     metadata = json.load(args.filename)
 
-    if args.all:
-        streams = metadata["history"]
-        streams.append(metadata["stream"])
-    else:
-        streams = [metadata["stream"]]
+    try:
+        if args.all:
+            streams = metadata["history"]
+            streams.append(metadata["stream"])
+        else:
+            streams = [metadata["stream"]]
+    except KeyError:
+        parser.exit(2, "Cannot find \"stream\" ot \"history\" object. Invalid JSON file provided")
 
     crash_detected = False
     for i, stream in enumerate(streams):
-        has_replayed = replay_stream(args.upstream, stream)
-        time.sleep(args.wait)
-        has_crashed = not is_alive(args.upstream)
-        if has_replayed and has_crashed:
-            crash_detected = True
-            print("Successfully crashed server by replaying stream %d: %s" % (i, "".join([pkt for pkt in stream])))
-            sys.exit(0)
+        try:
+            has_replayed = replay_stream(args.upstream, stream)
+        except (RuntimeWarning, ValueError):
+            logging.error("Failed to replay stream %d. Moving to next stream" % i)
+        else:
+            if has_replayed:
+                logging.warning("Sleeping for %d seconds before sending alive test" % args.wait)
+                time.sleep(args.wait)
+                logging.warning("Performing alive test against target")
+                has_crashed = not is_alive(args.upstream)
+                if has_crashed:
+                    crash_detected = True
+                    print(colorize("Successfully crashed server by replaying stream %d:%s%s" % (i, os.linesep, stream), TermColors.RED))
+                    sys.exit(0)
+                else:
+                    print(colorize("Replay of stream %d did not crash the server" % i, TermColors.GREEN))
+            else:
+                print(colorize("Replay of stream failed. Are fuzzmon or the server reachable?", TermColors.YELLOW))
 
     sys.exit(1)

@@ -54,7 +54,7 @@ def prepare_parser():
                                                              "process", type=float, default=10)
     parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
                                                                                       "ERROR", "CRITICAL"],
-                        default="INFO")
+                        default="WARNING")
     parser.add_argument("program", help="The command line to run and attach to", nargs=argparse.REMAINDER)
     return parser
 

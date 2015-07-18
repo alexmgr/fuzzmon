@@ -116,3 +116,19 @@ class Dequeue(object):
 
     def sort(self, cmp=None, key=None, reverse=False):
         self.items.sort(cmp=cmp, key=key, reverse=reverse)
+
+
+def colorize(str_, colour):
+    return "%s%s%s" % (colour, str_, TermColors.END)
+
+
+class TermColors(object):
+    # From here: http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python
+    PINK = "\033[95m"
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    END = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
