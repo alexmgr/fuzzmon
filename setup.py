@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name="fuzzmon",
-    version="0.2",
+    version="0.3",
     packages=["fuzz_proxy"],
     author="Alex Moneger",
     author_email="alexmgr+github@gmail.com",
