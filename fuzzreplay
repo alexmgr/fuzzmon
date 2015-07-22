@@ -110,7 +110,8 @@ if __name__ == "__main__":
                 has_crashed = not is_alive(args.upstream)
                 if has_crashed:
                     crash_detected = True
-                    print(colorize("Successfully crashed server by replaying stream %d:%s%s" % (i, os.linesep, stream), TermColors.RED))
+                    print(colorize("Successfully crashed server by replaying stream %d:%s%s" % (i, os.linesep, stream),
+                                   TermColors.RED))
                     sys.exit(0)
                 else:
                     print(colorize("Replay of stream %d did not crash the server" % i, TermColors.GREEN))

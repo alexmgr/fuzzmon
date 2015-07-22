@@ -114,8 +114,8 @@ class Dequeue(object):
     def reverse(self):
         self.items.reverse()
 
-    def sort(self, cmp=None, key=None, reverse=False):
-        self.items.sort(cmp=cmp, key=key, reverse=reverse)
+    def sort(self, cmp_=None, key=None, reverse=False):
+        self.items.sort(cmp=cmp_, key=key, reverse=reverse)
 
 
 def colorize(str_, colour):

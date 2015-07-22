@@ -36,9 +36,8 @@ def prepare_parser():
                                                  "uds:proto:file for Unix Domain Sockets", type=socket_type,
                         required=True)
     parser.add_argument("-d", "--downstream", help="IP and port to bind to, or UDS. Format is proto:host:port or "
-                                                   "uds:proto:file. By default, listen to TCP connections on port 25746",
-                        type=socket_type,
-                        default="tcp:0.0.0.0:25746")
+                                                   "uds:proto:file. By default, listen to TCP connections on port "
+                                                   "25746", type=socket_type, default="tcp:0.0.0.0:25746")
     parser.add_argument("-o", "--output", help="Output folder where to store the crash metadata", default="metadata")
     parser.add_argument("-s", "--session", help="A session identifier for the fuzzing session")
     parser.add_argument("-f", "--fork", help="Trace fork and child process", action="store_true")
