@@ -23,7 +23,7 @@ setup(
     install_requires=["python-ptrace", "distorm3"],
     scripts=["fuzzmon", "fuzzreplay"],
     # generate rst from .md:  pandoc --from=markdown --to=rst README.md -o README.rst
-    long_description=read("README.rst") if os.path.isfile("README.rst") else read("README.md")
+    long_description=read("README.rst") if os.path.isfile("README.rst") else read("README.md"),
     test_suite="nose.collector",
     tests_require=["nose"]
 )
