@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="fuzzmon",
-    version="0.3",
+    version="0.4",
     packages=["fuzz_proxy"],
     author="Alex Moneger",
     author_email="alexmgr+github@gmail.com",
